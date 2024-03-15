@@ -28,6 +28,8 @@ from weather_api import get_weather_data
 broker_address = "mqtt.eclipseprojects.io"
 topic = "Spirulina_Edge"
 received_data = None
+tunis_latitude = 36.8065
+tunis_longitude = 10.1815
 
 # Define a callback function to handle received messages
 def on_message(client, userdata, msg):
@@ -35,11 +37,18 @@ def on_message(client, userdata, msg):
     # Decode and print the received message
     received_data = json.loads(msg.payload.decode())
     print("Received data:", received_data)
+def get_weather_data(latitude, longitude):
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&hourly=temperature_2m,precipitation"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception if the response status code is not 200
+        weather_data = response.json()  # Parse the JSON response
+        return weather_data
+    except requests.RequestException as e:
+        print(f"Error fetching weather data: {e}")
+        return None
     
-
-
-
-
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # workaround for HuggingFace/tokenizers
 
      
@@ -94,7 +103,7 @@ def main():
     # Be sure your local model suports a large context size for this
     llm = ChatOpenAI(
          #base_url="http://localhost:1234/v1",
-        api_key="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",
+        api_key="key_api",
         temperature=0.6
         
    )
@@ -112,32 +121,43 @@ def main():
         llm=llm,
         memory=memory,
         retriever=vectorstore.as_retriever()
-    )
- 
-  
-
-       # Start a REPL loop
+    
+        )
     while True:
         if received_data:
-            user_input = json.dumps(received_data)
+            user_input = json.dumps(received_data) 
+            print("Received data:", received_data)
             received_data = None  # Reset received_data to None after using it
         else:
             user_input = input("Enter your input: ")
-        if user_input=="exit":
+
+        if user_input == "exit":
             break
-        memory.chat_memory.add_user_message(user_input)
-        result = qa_chain({"question": user_input})
-        response = result["answer"]
-        memory.chat_memory.add_ai_message(response)
-        print("AI:", response)
-       
+        else:
+            tunis_latitude = 36.8065
+            tunis_longitude = 10.1815
+            weather_data = get_weather_data(tunis_latitude, tunis_longitude)
+            if weather_data:
+                print("Weather data for Tunis:")
+                print(f"Temperature at 2m: {weather_data['hourly']['temperature_2m'][0]}°C")
+                print(f"Precipitation: {weather_data['hourly']['precipitation'][0]} mm")
+            else:
+                print("Unable to fetch weather data.")
+
+            memory.chat_memory.add_user_message(user_input)
+            result = qa_chain({"question": user_input})
+            response = result["answer"]
+            memory.chat_memory.add_ai_message(response)
+            print("AI:", response)
+
+    
+
+          
      # Stop MQTT client loop when exiting the while loop
         client.loop_stop()
 
 
-      
 
 if __name__ == "__main__":
     main()
-
 
